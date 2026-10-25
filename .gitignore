@@ -1,0 +1,38 @@
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- siemgen runtime output -------------------------------------------------
+# generated log files (output.base_dir)
+out/
+# LLM decision cache, manifests
+runs/
+# `siemgen gen-org` export
+org.generated.json
+*.manifest.json
+
+# --- local configuration / secrets (never commit) ---------------------------
+# personal copy of config/org.example.yaml
+config/org.yaml
+config/*.local.yaml
+.env
+*.crt
+*.pem
+*.key
+
+# --- editors / OS -----------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# --- default output directory of `siemgen generate` / docker compose ---------
+logs/
