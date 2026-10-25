@@ -1,0 +1,121 @@
+# WORK network baseline — what a workstation emits while actually WORKING.
+# Calibrated from PUBLISHED statistics (not a personal capture):
+#   * HTTP Archive / Web Almanac 2024: median ~71 requests per page;
+#     Web Almanac 2025 (Third Parties): median ~23 unique third-party domains/page
+#     (a page contacts ~30-80 domains total).
+#   * Cisco Umbrella: ~3000 DNS queries/user/day flagged as "excessive"
+#     (a normal active user ~1000-2000/day -> ~3-4/min over an 8h day).
+#   * SolarWinds / Fortinet SIEM sizing: a workstation ~1-5 EPS; firewall event ~500-1500 B.
+# Rendered, like leisure, as Suricata flows + DNS + TLS handshakes + pfSense passes,
+# tagged labels.state: working, labels.offtask: false, labels.app: work — but to
+# ROLE-APPROPRIATE business destinations (finance does NOT hit github, etc.).
+
+profile:
+  transport: tcp            # business web is mostly HTTP/2 over TLS (TCP/443)
+  quic_fraction: 0.2        # some Google/Microsoft endpoints negotiate QUIC
+  mb_per_min: 1.5           # browsing + email + docs (far below video streaming)
+  down_up: 4                # asymmetric, but nowhere near video's 27:1
+  flows_per_min: 10         # ~connections/min (pages reuse HTTP/2 + SaaS polling)
+  dns_per_min: 4            # ~1500-2000 lookups/day over an 8h day
+  tls_per_min: 6            # new TLS connections opened
+  pfsense_per_min: 5        # firewall "pass" lines (a connection also hits the FW)
+  pfsense_block_per_min: 1  # blocked connections (inbound scan noise + blocked egress)
+
+# ENDPOINT / IDENTITY per-minute telemetry while WORKING ('EDR on', host-heavy).
+# Target: endpoint+identity ~30-40% of total events (the signal UEBA keys on).
+# Windows ~9 process-creations/min + periodic logon/Kerberos/share; Linux ~6 EXECVE/min.
+# Tune these to shift the endpoint-vs-network volume mix without touching code.
+endpoint:
+  windows:
+    proc_per_min: 16         # 4688 process creations / working minute (parent->child chains)
+    logon_per_min: 0.15      # 4624 network logons (type 3) / min
+    kerberos_per_min: 0.25   # 4769 service-ticket requests / min
+    fileshare_per_min: 0.20  # 5140 network-share access / min
+    failed_logon_per_min: 0.03  # 4625 failed logons / min (rare, benign typos)
+  linux:
+    exec_per_min: 10         # auditd EXECVE / working minute
+  # Sysmon (Microsoft-Windows-Sysmon/Operational) — rich per-process endpoint telemetry.
+  # Enabling 'sysmon' as a source raises the endpoint share (realistic for "EDR on");
+  # lower these (or windows.proc_per_min) to rebalance the endpoint-vs-network mix.
+  sysmon:
+    net_per_min: 4           # EID 3 network connections / min (carries community_id)
+    dns_per_min: 2           # EID 22 DNS queries per process / min
+    file_per_min: 1.5        # EID 11 file creations / min
+    proc_per_min: 1          # EID 1 process creations / min (with hashes)
+  azuread:
+    signin_per_min: 0.08     # M365/Azure AD sign-ins per user per minute (~3-4/day)
+
+# Synthetic destination IP ranges (first two octets) for business CDNs / clouds:
+# Microsoft (20/40/52/13), Google (142.250/172.217), AWS (3/52), Akamai (23/104).
+cdn_prefixes: ["20.190", "40.126", "52.96", "13.107", "142.250", "172.217",
+               "3.233", "52.84", "23.50", "104.16"]
+
+# Always-present, role-agnostic destinations (M365, identity, OS, internal apps).
+common_domains:
+  - "login.microsoftonline.com"
+  - "outlook.office365.com"
+  - "*.sharepoint.com"
+  - "teams.microsoft.com"
+  - "*.onedrive.com"
+  - "graph.microsoft.com"
+  - "www.office.com"
+  - "*.windowsupdate.com"
+  - "intranet.{org}"        # {org} = the organisation's DNS suffix (e.g. acme.local)
+  - "mail.{org}"
+  - "erp.{org}"
+
+# Role-appropriate business destinations (keyed by the org domain code).
+domains_by_role:
+  IT:
+    - "github.com"
+    - "api.github.com"
+    - "gitlab.com"
+    - "*.amazonaws.com"
+    - "console.aws.amazon.com"
+    - "hub.docker.com"
+    - "registry-1.docker.io"
+    - "stackoverflow.com"
+    - "pypi.org"
+    - "registry.npmjs.org"
+    - "*.atlassian.net"
+  FIN:
+    - "*.sap.com"
+    - "login.oracle.com"
+    - "*.netsuite.com"
+    - "www.bloomberg.com"
+    - "www.reuters.com"
+    - "*.xero.com"
+    - "quickbooks.intuit.com"
+    - "online.sage.com"
+  HR:
+    - "*.myworkday.com"
+    - "*.successfactors.com"
+    - "*.bamboohr.com"
+    - "app.greenhouse.io"
+    - "*.adp.com"
+    - "www.docusign.net"
+    - "www.linkedin.com"
+  LEG:
+    - "www.docusign.net"
+    - "*.lexisnexis.com"
+    - "*.thomsonreuters.com"
+    - "signon.thomsonreuters.com"
+    - "*.ironcladapp.com"
+  OPS:
+    - "*.salesforce.com"
+    - "*.service-now.com"
+    - "*.slack.com"
+    - "*.zendesk.com"
+    - "*.atlassian.net"
+    - "*.asana.com"
+  EXE:
+    - "app.powerbi.com"
+    - "*.tableau.com"
+    - "www.ft.com"
+    - "www.bloomberg.com"
+    - "www.docusign.net"
+  GENERAL:
+    - "www.google.com"
+    - "*.wikipedia.org"
+    - "*.bing.com"
+    - "duckduckgo.com"

@@ -1,0 +1,78 @@
+# ---------------------------------------------------------------------------
+#  SIEMgen — classroom profile
+#
+#  One small company, ~20 people, two weeks of history + a live feed, written as
+#  native log FILES only. No SIEM, no network. Used by `siemgen generate` and by
+#  the Docker image. Values that change per group (seed, company name, number of
+#  users) are normally passed on the command line / environment, not edited here:
+#
+#     siemgen generate --seed 42 --org blue-team --out ./logs
+#     SIEMGEN_SEED=42 SIEMGEN_ORG=blue-team docker compose up
+# ---------------------------------------------------------------------------
+seed: 1337                       # overridden by --seed / SIEMGEN_SEED
+
+organization:
+  name: acme-corp                # overridden by --org / SIEMGEN_ORG; "blue-team" -> blue.local / BLUE
+  users: 20                      # overridden by --users / SIEMGEN_USERS
+  sites: [hq, branch-eu, remote]
+  departments:                   # share of headcount per organisational domain
+    IT: 0.15
+    HR: 0.10
+    FIN: 0.15
+    LEG: 0.05
+    OPS: 0.20
+    EXE: 0.05
+    GENERAL: 0.30
+  servers: [dc, web, mail, file, erp, dns, vpn, backup]
+
+# Every source writes its native format to a file under the output directory
+# (--out / SIEMGEN_OUT, default ./logs). Paths are relative to that directory.
+sources:
+  nginx:       { enabled: true, path: nginx/access.log }
+  linux_auth:  { enabled: true, path: auth.log }
+  pfsense:     { enabled: true, path: pfsense/filterlog.log }
+  auditd:      { enabled: true, path: audit/audit.log }
+  windows:     { enabled: true, path: windows/security.ndjson }
+  sysmon:      { enabled: true, path: windows/sysmon.ndjson }
+  dns:         { enabled: true, path: dnsmasq.log }
+  vpn:         { enabled: true, path: openvpn.log }
+  mail:        { enabled: true, path: mail.log }
+  dhcp:        { enabled: true, path: dhcpd.log }
+  suricata:    { enabled: true, path: suricata/eve.json }
+  cloud_audit: { enabled: true, path: nextcloud/audit.log }
+  azuread:     { enabled: true, path: azure/signin.ndjson }
+
+output:
+  base_dir: ./logs               # overridden by --out / SIEMGEN_OUT
+  default_sink: file
+
+# Leisure traffic (YouTube / Spotify / Instagram / adult), calibrated from real
+# packet captures. rate_multiplier scales the per-minute counts, not the shape.
+leisure:
+  enabled: true
+  profiles: config/leisure-profiles.yaml
+  rate_multiplier: 0.08
+
+# Behavioural director: per-user state machine (working / meeting / leisure /
+# mixed / absent), archetypes with individual traits, PT holidays, weekends.
+# MUST stay on for the classroom: it is what makes every (user, day) independent
+# and therefore the timeline reproducible and resumable.
+behavior:
+  director: rules
+  personas: config/personas.yaml
+  work_profiles: config/work-profiles.yaml
+  work_intensity: 0.15           # role-appropriate business network traffic while working
+  endpoint_intensity: 0.06       # Windows Security / Sysmon / auditd / Azure AD per-minute rates
+  # With 20 users these give roughly 55-65k events per working day and ~400 MB for
+  # two weeks: deliberately several times lighter than a real 20-person company
+  # with EDR, so a laptop SIEM copes. Raise them for a heavier dataset.
+
+# `generate` phase defaults (overridden by --days / --mode / --speed).
+generate:
+  days: 14                       # history depth; 14 keeps Elastic/OpenSearch ML jobs happy
+  mode: both                     # history | live | both
+  speed: 1.0                     # live-phase time compression (12 = one day in two hours)
+  tick: 1.0                      # seconds between live flushes (real time)
+
+ground_truth:
+  labels: false                  # native files never carry labels anyway

@@ -1,0 +1,76 @@
+# Behavioural ARCHETYPES (distributions). Each USER samples its own concrete traits
+# from its archetype (stable per-user seed), so users of the same archetype are
+# distinct-but-stable individuals — essential for per-user UEBA baselines.
+#
+# Trait ranges are [min, max] uniform draws (per user). leisure_pool/leisure_pick
+# define which leisure apps the user tends to use.
+
+archetypes:
+  focado:            # heads-down worker (typical FIN/office)
+    distractibility:     [0.05, 0.25]
+    focus_bias:          [0.70, 0.95]
+    leisure_propensity:  [0.2, 0.6]
+    meeting_propensity:  [0.10, 0.40]
+    weekend_work_chance: [0.00, 0.05]
+    leisure_pool: [spotify, youtube]
+    leisure_pick: [1, 2]
+
+  distraido:         # easily distracted (typical GENERAL)
+    distractibility:     [0.50, 0.90]
+    focus_bias:          [0.20, 0.50]
+    leisure_propensity:  [1.0, 2.2]
+    meeting_propensity:  [0.05, 0.20]
+    weekend_work_chance: [0.00, 0.03]
+    leisure_pool: [youtube, instagram, spotify]
+    leisure_pick: [1, 3]
+
+  admin_it:          # IT admin: long hours, on-call, technical, low leisure
+    distractibility:     [0.20, 0.45]
+    focus_bias:          [0.55, 0.85]
+    leisure_propensity:  [0.3, 0.9]
+    meeting_propensity:  [0.20, 0.50]
+    weekend_work_chance: [0.20, 0.45]
+    leisure_pool: [youtube, spotify]
+    leisure_pick: [1, 2]
+
+  executivo:         # exec: meeting-heavy, sporadic presence, low volume
+    distractibility:     [0.10, 0.30]
+    focus_bias:          [0.60, 0.90]
+    leisure_propensity:  [0.2, 0.5]
+    meeting_propensity:  [0.50, 0.85]
+    weekend_work_chance: [0.05, 0.20]
+    leisure_pool: [youtube]
+    leisure_pick: [1, 1]
+
+# Default archetype per organizational domain.
+domain_archetype:
+  EXE: executivo
+  IT: admin_it
+  FIN: focado
+  HR: focado
+  LEG: focado
+  OPS: focado
+  GENERAL: distraido
+
+# ~15% of users get a DIFFERENT (random) archetype than their domain default,
+# so a team is not behaviourally uniform.
+mix_fraction: 0.15
+
+# Overlay applied to ~6% of users (any domain): adds 'adult' to their leisure apps
+# and raises their leisure propensity (the sensitive AUP signal).
+risco_aup_fraction: 0.06
+risco_aup_propensity_boost: 1.8
+
+# "meeting" app profile (Zoom/Teams) used by the meeting state. Near-symmetric
+# bytes (a video call uploads too), unlike streaming.
+meeting_app:
+  category: meeting
+  client: native_app
+  transport: udp                 # Zoom/Teams media over UDP
+  domains: ["*.zoom.us", "*.teams.microsoft.com", "*.sfbassets.com", "*.skype.com"]
+  cdn_prefixes: ["170.114", "52.112", "13.107"]
+  mb_per_min: 12
+  down_up: 1.3                    # near-symmetric (call = send + receive)
+  flows_per_min: 8
+  dns_per_min: 4
+  tls_per_min: 3

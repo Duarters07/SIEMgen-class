@@ -1,0 +1,46 @@
+# SIEMgen — one command, one company, two weeks of logs and a live feed.
+#
+#   cp .env.example .env        # set SIEMGEN_SEED (your group's number) and SIEMGEN_ORG
+#   docker compose up --build   # history is written first, then the live feed keeps running
+#
+# Everything lands in ./logs on this machine, in each product's native format.
+# Point YOUR collector (Filebeat, Fluent Bit, Vector, rsyslog, Wazuh agent, ...) at
+# ./logs and ship it to YOUR SIEM. The generator itself never talks to a SIEM.
+services:
+  siemgen:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: siemgen:classroom
+    container_name: siemgen
+    environment:
+      # files on the host belong to this uid/gid, not to root: set them to `id -u` / `id -g`
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      SIEMGEN_SEED: "${SIEMGEN_SEED:-1337}"     # your group's number -> your own company
+      SIEMGEN_ORG: "${SIEMGEN_ORG:-acme-corp}"  # company name -> DNS suffix + Windows domain
+      SIEMGEN_USERS: "${SIEMGEN_USERS:-20}"     # employees
+      SIEMGEN_DAYS: "${SIEMGEN_DAYS:-14}"       # days of history before "now"
+      SIEMGEN_MODE: "${SIEMGEN_MODE:-both}"     # history | live | both
+      SIEMGEN_SPEED: "${SIEMGEN_SPEED:-1}"      # live time compression (1 = real time)
+    volumes:
+      - ./logs:/logs
+    # Restart only if the generator crashes (max 3 times). A clean exit — e.g.
+    # SIEMGEN_MODE=history finished writing — must NOT be restarted in a loop.
+    # After a reboot, run `docker compose up -d` again: it resumes where it stopped.
+    restart: on-failure:3
+    stop_grace_period: 20s
+
+  # ------------------------------------------------------------------------
+  # Your collector goes here. This is deliberately NOT configured: writing the
+  # collector configuration and the parsers is the exercise. Example skeleton:
+  #
+  # filebeat:
+  #   image: docker.elastic.co/beats/filebeat:8.19.7
+  #   user: root
+  #   command: ["filebeat", "-e", "--strict.perms=false"]
+  #   volumes:
+  #     - ./logs:/logs:ro
+  #     - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+  #   depends_on: [siemgen]
+  # ------------------------------------------------------------------------

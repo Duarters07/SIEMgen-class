@@ -1,0 +1,94 @@
+# Leisure / off-task network profiles, derived from REAL packet captures
+# (see ../../captures/). Each profile is rendered as flow records (bytes in the
+# Suricata eve flow) + DNS queries + a pfSense "pass" line, during work hours,
+# tagged with labels.activity / labels.offtask for ground truth.
+#
+# transport: quic -> UDP/443 | tcp -> TCP/443
+# mb_per_min: downstream MB per minute (measured) | down_up: down:up byte ratio
+# session_min: [min, max] session length in minutes
+# cdn_prefixes: first two octets of the CDN/ASN ranges (IPs synthesised within)
+# client: browser -> also emits ad/analytics "noise" domains | native_app -> clean
+# detection: informational only (no block event is emitted, per design)
+
+profiles:
+  youtube:
+    category: streaming_video
+    client: browser
+    transport: quic
+    asn: 15169
+    domains: ["*.googlevideo.com", "i.ytimg.com", "www.youtube.com", "yt3.ggpht.com"]
+    cdn_prefixes: ["142.250", "172.217", "34.107"]
+    mb_per_min: 8
+    down_up: 27
+    session_min: [4, 25]
+    flows_per_min: 39      # measured: ~38 flows/min (TCP+UDP conversations)
+    dns_per_min: 22
+    tls_per_min: 14
+    detection: offtask
+
+  spotify:
+    category: streaming_audio
+    client: native_app
+    transport: tcp
+    asn: [54113, 20940, 15169]
+    domains: ["audio-fa.scdn.co", "i.scdn.co", "*.spotifycdn.com", "*-spclient.spotify.com"]
+    cdn_prefixes: ["151.101", "23.50", "35.186"]
+    mb_per_min: 11
+    down_up: 57
+    session_min: [10, 60]
+    flows_per_min: 31
+    dns_per_min: 10
+    tls_per_min: 4
+    detection: offtask
+
+  instagram:
+    category: social_video
+    client: browser
+    transport: quic
+    asn: 32934
+    domains: ["scontent.cdninstagram.com", "*.fbcdn.net", "graph.instagram.com", "www.instagram.com"]
+    cdn_prefixes: ["157.240", "31.13"]
+    mb_per_min: 78
+    down_up: 52
+    session_min: [3, 20]
+    flows_per_min: 48
+    dns_per_min: 12
+    tls_per_min: 8
+    detection: offtask
+
+  adult:
+    category: adult
+    client: browser
+    transport: tcp
+    asn: null
+    domains: ["adult-site.example", "*.adult-cdn.example", "*.adnetwork.example"]
+    cdn_prefixes: ["188.92", "66.254"]
+    mb_per_min: 62
+    down_up: 77
+    session_min: [2, 15]
+    flows_per_min: 135     # ad/tracker-heavy: many parallel connections
+    dns_per_min: 73
+    tls_per_min: 53
+    ad_heavy: true
+    detection: aup        # informational only; no block event emitted
+
+# Browser sessions also resolve some of these (ads/analytics/fonts) as noise.
+browser_noise_domains:
+  - "googleads.g.doubleclick.net"
+  - "pagead2.googlesyndication.com"
+  - "region1.google-analytics.com"
+  - "www.googletagmanager.com"
+  - "fonts.gstatic.com"
+
+# Per-domain base propensity (expected off-task sessions per working day).
+# Tuned so most users slack a little; multiplied by per-user jitter, and a few
+# users become "heavy slackers". Adult is restricted to a small fraction of users.
+propensity_by_domain:
+  GENERAL: 1.2
+  OPS: 0.9
+  HR: 0.8
+  FIN: 0.6
+  LEG: 0.6
+  IT: 0.7
+  EXE: 0.4
+adult_user_fraction: 0.06
