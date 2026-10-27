@@ -151,6 +151,26 @@ def cmd_seed_registry(cfg, org, args):
     print(f"[siemgen] seeded {len(org.users)} users + {len(org.hosts)} hosts into {index}")
 
 
+def _incident_defaults(args) -> None:
+    """`incident` must describe the SAME company as the run it is written into: take
+    seed / org / users from the state file in the output folder unless given."""
+    import os
+    out = Path(args.out or os.environ.get("SIEMGEN_OUT") or "./logs")
+    p = out / ".siemgen-state.json"
+    st = {}
+    if p.exists():
+        try:
+            st = json.loads(p.read_text())
+        except (OSError, ValueError):
+            st = {}
+    elif not args.dry_run:
+        print(f"[siemgen] WARNING: no run state in {out.resolve()}; using --seed/--org/--users or the defaults.")
+    for key in ("seed", "org", "users"):
+        if getattr(args, key) is None and key in st:
+            setattr(args, key, st[key])
+    args.out = str(out)
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         prog="siemgen",
@@ -182,12 +202,27 @@ def main(argv=None) -> int:
     sub.add_parser("seed-registry", help="(thesis) push org to siem-entity-registry")
     sub.add_parser("list-scenarios", help="list scenario files").add_argument("--dir")
 
+    inc = sub.add_parser("incident", help="append one simulated intrusion to the log files (classroom Level 4)")
+    inc.add_argument("--out", help="generator output folder (default: $SIEMGEN_OUT or ./logs)")
+    inc.add_argument("--seed", type=int, help="default: the seed of the run in the output folder")
+    inc.add_argument("--org", help="default: the company of the run in the output folder")
+    inc.add_argument("--users", type=int, help="default: the user count of the run in the output folder")
+    inc.add_argument("--live", action="store_true", help="replay in real time (about 4 min) instead of all at once")
+    inc.add_argument("--dry-run", action="store_true", help="print the lines instead of writing them")
+    inc.add_argument("--reveal", action="store_true", help="instructor: print attacker IP, account and server")
+
     args = p.parse_args(argv)
     cfg_path = args.config
     if cfg_path is None:
         cfg_path = DEFAULT_CONFIG if Path(DEFAULT_CONFIG).exists() else "config/org.yaml"
+    if args.cmd == "incident":
+        _incident_defaults(args)
     cfg = _apply_overrides(load_config(cfg_path), args)
     org = generate_org(cfg, int(cfg.get("seed", 1337)))
+
+    if args.cmd == "incident":
+        from .incident import run as incident_run
+        return incident_run(cfg, org, args)
 
     dispatch = {
         "generate": cmd_generate, "gen-org": cmd_gen_org, "backfill": cmd_backfill,
